@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RDW Kenteken Test — PEPE</title>
+<style>
+  :root{--bg:#0e0c1a;--surface:#161328;--surface2:#1e1a30;--border:#2d2848;--accent:#921939;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--yellow:#fbbf24;--text:#f0eef8;--muted:#8880aa}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:40px 20px}
+  .wrap{max-width:680px;margin:0 auto}
+  .logo{font-size:22px;font-weight:900;letter-spacing:.04em;margin-bottom:6px}
+  .logo span{color:var(--accent)}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:32px}
+  .row{display:flex;gap:10px;margin-bottom:24px}
+  input{flex:1;padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;outline:none}
+  input:focus{border-color:var(--accent)}
+  button{padding:12px 24px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}
+  button:hover{background:#b01f45}
+  button:disabled{opacity:.5;cursor:default}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:14px}
+  .card-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .field label{font-size:11px;color:var(--muted);display:block;margin-bottom:3px}
+  .field .val{font-size:15px;font-weight:600}
+  .ok{color:var(--green)}.warn{color:var(--yellow)}.err{color:var(--red)}.muted{color:var(--muted)}
+  .recall{background:var(--surface2);border-left:3px solid var(--red);border-radius:8px;padding:12px 14px;margin-top:10px}
+  .recall-code{font-size:12px;font-weight:700;color:var(--red);margin-bottom:4px}
+  .recall-desc{font-size:13px}
+  .recall-risk{font-size:11px;color:var(--muted);margin-top:3px}
+  .badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+  .badge-ok{background:rgba(74,222,128,.12);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+  .badge-warn{background:rgba(251,191,36,.12);color:var(--yellow);border:1px solid rgba(251,191,36,.3)}
+  .badge-err{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3)}
+  .error-box{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:12px;padding:16px 20px;color:var(--red);font-size:14px}
+  details{margin-top:14px}
+  summary{cursor:pointer;color:var(--muted);font-size:12px;padding:8px 0}
+  pre{font-size:11px;color:var(--muted);white-space:pre-wrap;background:var(--surface2);padding:12px;border-radius:8px;margin-top:8px;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">PEPE <span>Search Pro</span></div>
+  <div class="sub">RDW API testpagina &mdash; APK datum &amp; terugroepacties ophalen op kenteken</div>
+  <div class="row">
+    <input id="kt" placeholder="bijv. AB123C" maxlength="9" autocomplete="off"
+      oninput="this.value=this.value.replace(/-/g,'').toUpperCase()"
+      onkeydown="if(event.key==='Enter')go()">
+    <button id="btn" onclick="go()">&#128269; Opzoeken</button>
+  </div>
+  <div id="out"></div>
+</div>
+<script>
+async function go() {
+  var k = document.getElementById('kt').value.replace(/-/g,'').toUpperCase().trim();
+  if (!k) { alert('Vul een kenteken in'); return; }
+  var btn = document.getElementById('btn'), out = document.getElementById('out');
+  btn.disabled = true;
+  out.innerHTML = '<p style="color:var(--muted);padding:16px 0">Ophalen bij RDW...</p>';
+  try {
+    var results = await Promise.all([
+      fetch('https://opendata.rdw.nl/resource/m9d7-ebf2.json?kenteken='+k+'&$limit=1').then(function(r){return r.json();}),
+      fetch('https://opendata.rdw.nl/resource/vkij-7mwc.json?kenteken='+k+'&$limit=1').then(function(r){return r.json();}),
+      fetch('https://opendata.rdw.nl/resource/j9yg-7rg9.json?$limit=200').then(function(r){return r.json();})
+    ]);
+    var v = results[0][0], a = results[1][0], terugroepAll = results[2];
+    if (!v) { out.innerHTML = '<div class="error-box">Kenteken <strong>'+k+'</strong> niet gevonden in RDW.</div>'; return; }
+
+    // APK
+    var apkStr = '&mdash;', apkClass = 'muted', apkBadge = '', apkDagen = null;
+    var apkRaw = v.vervaldatum_apk;
+    if (apkRaw && apkRaw.length >= 8) {
+      var jaar = apkRaw.substring(0,4), mnd = apkRaw.substring(4,6), dag = apkRaw.substring(6,8);
+      apkStr = dag+'-'+mnd+'-'+jaar;
+      apkDagen = Math.round((new Date(parseInt(jaar),parseInt(mnd)-1,parseInt(dag)) - new Date()) / 86400000);
+      apkClass = apkDagen < 0 ? 'err' : apkDagen < 60 ? 'warn' : 'ok';
+      apkBadge = apkDagen < 0 ? '<span class="badge badge-err">Verlopen</span>' : apkDagen < 60 ? '<span class="badge badge-warn">Nog '+apkDagen+' dagen</span>' : '<span class="badge badge-ok">Geldig</span>';
+    }
+
+    // Eerste toelating
+    var et = '&mdash;';
+    if (v.datum_eerste_toelating) { var d=v.datum_eerste_toelating; et=d.substring(6,8)+'-'+d.substring(4,6)+'-'+d.substring(0,4); }
+
+    // Terugroepacties
+    var tg = v.typegoedkeuringsnummer || '';
+    var recalls = terugroepAll.filter(function(r){ return tg && r.typegoedkeuringsnummer === tg; });
+
+    out.innerHTML =
+      '<div class="card"><div class="card-title">Voertuiggegevens</div><div class="grid">' +
+      '<div class="field"><label>Merk</label><div class="val">'+(v.merk||'&mdash;')+'</div></div>' +
+      '<div class="field"><label>Model</label><div class="val">'+(v.handelsbenaming||'&mdash;')+'</div></div>' +
+      '<div class="field"><label>Kleur</label><div class="val">'+(v.eerste_kleur||'&mdash;')+'</div></div>' +
+      '<div class="field"><label>Eerste toelating</label><div class="val">'+et+'</div></div>' +
+      '</div></div>' +
+
+      '<div class="card"><div class="card-title">APK</div><div class="grid">' +
+      '<div class="field"><label>Vervaldatum APK</label><div class="val '+apkClass+'">'+apkStr+'</div></div>' +
+      '<div class="field"><label>Status</label><div style="margin-top:4px">'+(apkBadge||'<span class="muted">Onbekend</span>')+'</div></div>' +
+      '</div></div>' +
+
+      '<div class="card"><div class="card-title">Terugroepacties</div>' +
+      (recalls.length === 0
+        ? '<div style="color:var(--green);font-weight:600;font-size:14px">&#10003; Geen open terugroepacties gevonden</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:6px">Typegoedkeuringsnummer: <strong>'+(tg||'onbekend')+'</strong></div>'
+        : '<span class="badge badge-err" style="margin-bottom:8px;display:inline-flex">&#9888; '+recalls.length+' terugroepactie'+(recalls.length>1?'s':'')+'</span>' +
+          recalls.map(function(r){
+            return '<div class="recall">' +
+              '<div class="recall-code">'+(r.code_terugroepactie||'')+(r.referentienummer_rdw?' &mdash; Ref: '+r.referentienummer_rdw:'')+'</div>' +
+              '<div class="recall-desc">'+(r.omschrijving_defect||r.beschrijving_terugroepactie||'Zie RDW voor details')+'</div>' +
+              (r.risico ? '<div class="recall-risk">Risico: '+r.risico+'</div>' : '') +
+              '</div>';
+          }).join('')
+      ) + '</div>' +
+
+      '<details><summary>Ruwe API data (debug)</summary>' +
+      '<pre>'+JSON.stringify({voertuig:v, apk:a, recalls:recalls, typegoedkeuringsnummer:tg}, null, 2)+'</pre>' +
+      '</details>';
+
+  } catch(e) {
+    out.innerHTML = '<div class="error-box"><strong>Fout:</strong> '+e.message+'<br><br>' +
+      '<span style="font-size:12px;color:var(--muted)">Werkt alleen als pagina gehost is (GitHub/Netlify), niet lokaal geopend.</span></div>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
